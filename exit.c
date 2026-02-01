@@ -88,20 +88,27 @@ char editorReadKey() {
 }
 
 int getCursorPosition(int *rows, int *cols) {
+    char buf[32];
+    unsigned int i = 0;
+
     // The command sent to get the cursor position
     if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4) return -1; 
-    printf("\r\n");
 
-    char c;
-    while(read(STDIN_FILENO, &c, 1) == 1) {
-        if (iscntrl(c)) {
-            printf("%d\r\n", c);
-        } 
-        else{
-            printf("%d ('%c')\r\n", c, c);
-        }
+    while (i < sizeof(buf) - 1) {
+        // read each byte into the buffer one by one
+        // until we hit 'R', bcos the reply ends with 'R'
+        if (read(STDIN_FILENO, &buf[i], 1) != 1) break;
+        if (buf[i] == 'R') break;
+        i++;
     }
-    
+
+    // indicate the end of the buffer string using null terminator
+    buf[i] = '\0';
+    // we start printing from the 2nd character of the buffer
+    // this is becuase the 1st byte of the reply is the ESC character
+    // byte 27 in ASCII, which isn't printable so we skip it.
+    printf("\r\n&buf[1]: '%s'\r\n", &buf[1]);
+
     editorReadKey();
     
     return -1;

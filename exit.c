@@ -10,13 +10,19 @@
 // ECHO: flag responsible for echoing the characters we type in the terminal
 // without it we can't see what we type
 // ICANON - canonical/cooked mode flag.
-// ISIG: CTRL+C & CTRL+Z
-// IXON: CTRL+S & CTRL+Q
+// ISIG: CTRL+C & CTRL+Z functionality
+// IXON: CTRL+S & CTRL+Q functionality
 // IEXTEN: CTRL+V on Linux & Windows, CTRL+O on MacOS
-// ICRNL: CTRL+M
+// ICRNL: CTRL+M functionality
 // OPOST: flag resopnsible for the output processing, that is done by the terminal.
 // Basically, as you know the terminal translates our certain inputs like CTRL+S, 
 // same is done on its output side. Which is why we turn off the OPOST flag
+
+// 0x1f = 0001 1111
+#define CTRL_KEY(k) ((k) & 0x1f) // Simples macro for better understanding
+// Instead of writing the code for CTRL+C which would be 3
+// We can just pass 'C' or 'c' into the macro and it would be automatically
+// calculated for us
 
 struct termios orig_termios;
 
@@ -44,7 +50,7 @@ void enableRawMode(){
     raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);       
     
     raw.c_cc[VMIN] = 0; // Minimum amount of bytes until read returnss
-    raw.c_cc[VTIME] = 4; // wait 0.4 seconds for input
+    raw.c_cc[VTIME] = 5; // wait 0.4 seconds for input
 
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) die("tcsetattr"); // sets terminal settings
 }
@@ -63,7 +69,8 @@ int main(){
             printf("%d ('%c')\r\n", c, c);
         }
         
-        if (c == 'q') break;
+        if (c == CTRL_KEY('q')) break; // revampted the exit to CTRL+Q
     }
+
     return 0;
 }

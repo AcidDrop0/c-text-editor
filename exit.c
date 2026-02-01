@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <sys/ioctl.h>
 
 // Disabled flags: ECHO, ICANON, ISIG, IXON, IEXTEN, ICRNL, OPOST. 
 // These correspond to specific CTRL operations.
@@ -23,17 +24,28 @@
 
 // Convenient struct to store everything related to our terminal settings
 struct editorConfig {
+    int screenrows;
+    int screencols;
     struct termios orig_termios;
 };
 
 struct editorConfig E;
 
+void die(const char *s);
+void disableRawMode();
+void enableRawMode();
+char editorReadKey();
+void editorDrawRows();
+void clearScrean();
+void editorRefreshScreen();
+void editorProcessKeypress();
+int getWindowSize(int *rows, int *cols);
+
 
 // error handling function
 void die(const char *s) {
     // clear screen before exiting
-    write(STDOUT_FILENO, "\x1b[2J", 4);
-    write(STDOUT_FILENO, "\x1b[H", 3);
+    clearScrean();
 
     perror(s);
     exit(1);
@@ -75,17 +87,33 @@ char editorReadKey() {
     return c;
 }
 
+int getWindowSize(int *rows, int *cols) {
+    struct winsize ws;
+    if(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+        return -1;
+    } 
+    else{
+        *cols = ws.ws_col;
+        *rows = ws.ws_row;
+        return 0;
+    }
+}
+
 /*** Functions for terminal output ***/
-void editorDrawRows() { // draws '~' on 24 rows. VIM style
+void editorDrawRows() { // draws '~' VIM style 
     int y;
-    for (y = 0; y < 24; y++) {
+    for (y = 0; y < E.screenrows; y++) {
         write(STDOUT_FILENO, "~\r\n", 3);
     }
 }
 
-void editorRefreshScreen() {
+void clearScrean(){
     write(STDOUT_FILENO, "\x1b[2J", 4); // Clear terminal display 
     write(STDOUT_FILENO, "\x1b[H", 3); // Put cursor to the beginning
+}
+
+void editorRefreshScreen(){
+    clearScrean();
     
     editorDrawRows();
     
@@ -94,21 +122,28 @@ void editorRefreshScreen() {
 
 
 /*** Functions to process input  ***/
-void editorProcessKeypress() {
+void editorProcessKeypress(){
     char c = editorReadKey();
 
     switch (c) {
         case CTRL_KEY('q'): //exit if ctrl+Q is inputted
-            write(STDOUT_FILENO, "\x1b[2J", 4);
-            write(STDOUT_FILENO, "\x1b[H", 3);
+            clearScrean();
             exit(0);
             break;
     }
 }
 
 /*** Main ***/
+
+// initializes the Editor
+void initEditor() {
+  if (getWindowSize(&E.screenrows, &E.screencols) == -1) // checks if errored
+    die("getWindowSize");
+}
+
 int main(){
     enableRawMode();
+    initEditor();
 
     while (1) {
         editorRefreshScreen();

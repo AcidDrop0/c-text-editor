@@ -20,6 +20,8 @@
 // Basically, as you know the terminal translates our certain inputs like CTRL+S, 
 // same is done on its output side. Which is why we turn off the OPOST flag
 
+#define TEXIT_VERSION "0.0.1"
+
 // hex 0x1f = 0001 1111 (in binary) = 31 (in decimal)
 #define CTRL_KEY(k) ((k) & 0x1f) // Simple macro for better understanding
 
@@ -45,7 +47,7 @@ void disableRawMode();
 void enableRawMode();
 char editorReadKey();
 void editorDrawRows();
-void clearScrean();
+void clearScreen();
 void editorRefreshScreen();
 void editorProcessKeypress();
 int getWindowSize(int *rows, int *cols);
@@ -54,7 +56,7 @@ int getWindowSize(int *rows, int *cols);
 // error handling function
 void die(const char *s) {
     // clear screen before exiting
-    clearScrean();
+    clearScreen();
 
     perror(s);
     exit(1);
@@ -168,7 +170,27 @@ void abFree(struct abuf *ab) {
 void editorDrawRows(struct abuf *ab) { // draws '~' VIM style 
     int y;
     for (y = 0; y < E.screenrows; y++) {
-        abAppend(ab, "~", 1);
+        if(y == E.screenrows / 3){ // If on 1/3 part of the screen print welcome message
+            char welcome[80];
+            int welcomeLen = snprintf(welcome, sizeof(welcome),
+            "Texit editor -- version %s", TEXIT_VERSION); // welcome message
+
+            // message shouldn't exceed the terminal column size
+            if(welcomeLen > E.screencols) welcomeLen = E.screencols;
+
+            // Centering the welcome message
+            // padding - the amount of spaces we add till we append our message
+            int padding = (E.screencols - welcomeLen) / 2; 
+            if (padding) {
+                abAppend(ab, "~", 1);
+                padding--;
+            }
+            while (padding--) abAppend(ab, " ", 1);
+            abAppend(ab, welcome, welcomeLen);
+        }
+        else{
+            abAppend(ab, "~", 1);
+        }
 
         abAppend(ab, "\x1b[K", 3);
         // The last "\r\n" causes the terminal to scroll, pushing 
@@ -179,7 +201,7 @@ void editorDrawRows(struct abuf *ab) { // draws '~' VIM style
     }
 }
 
-void clearScrean(){
+void clearScreen(){
     write(STDOUT_FILENO, "\x1b[2J", 4); // Clear terminal display 
     write(STDOUT_FILENO, "\x1b[H", 3); // Put cursor to the beginning
 }
@@ -208,7 +230,7 @@ void editorProcessKeypress(){
 
     switch (c) {
         case CTRL_KEY('q'): //exit if ctrl+Q is inputted
-            clearScrean();
+            clearScreen();
             exit(0);
             break;
     }

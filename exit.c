@@ -170,6 +170,7 @@ void editorDrawRows(struct abuf *ab) { // draws '~' VIM style
     for (y = 0; y < E.screenrows; y++) {
         abAppend(ab, "~", 1);
 
+        abAppend(ab, "\x1b[K", 3);
         // The last "\r\n" causes the terminal to scroll, pushing 
         // the final ~ off the screen, so we skip printing it on the last row.
         if(y < E.screenrows - 1){
@@ -188,7 +189,6 @@ void editorRefreshScreen(){
 
     abAppend(&ab, "\x1b[?25l", 6); // hide the cursor --> no potential flickering effect
 
-    abAppend(&ab, "\x1b[2J", 4); // clear Terminal display
     abAppend(&ab, "\x1b[H", 3); // put cursor to the beginning
     
     editorDrawRows(&ab);

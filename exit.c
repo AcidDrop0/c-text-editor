@@ -186,12 +186,16 @@ void clearScrean(){
 void editorRefreshScreen(){
     struct abuf ab = ABUF_INIT;
 
+    abAppend(&ab, "\x1b[?25l", 6); // hide the cursor --> no potential flickering effect
+
     abAppend(&ab, "\x1b[2J", 4); // clear Terminal display
     abAppend(&ab, "\x1b[H", 3); // put cursor to the beginning
     
     editorDrawRows(&ab);
 
     abAppend(&ab, "\x1b[H", 3); // put cursor back after drawing '~'
+    abAppend(&ab, "\x1b[?25h", 6); // show the cursor back again
+
     
     write(STDOUT_FILENO, ab.b, ab.len); // one write call instead of multiple ones
     abFree(&ab);

@@ -27,6 +27,7 @@
 
 // Convenient struct to store everything related to our terminal settings
 struct editorConfig {
+    int cx, cy; // cursor placement
     int screenrows;
     int screencols;
     struct termios orig_termios;
@@ -215,7 +216,11 @@ void editorRefreshScreen(){
     
     editorDrawRows(&ab);
 
-    abAppend(&ab, "\x1b[H", 3); // put cursor back after drawing '~'
+    char buf[32]; // our string buffer
+    // puts the cursor at the position stored in the global editorConfig struct E
+    snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1); 
+    abAppend(&ab, buf, strlen(buf)); // using strlen we find the actual length of the buf string
+
     abAppend(&ab, "\x1b[?25h", 6); // show the cursor back again
 
     
@@ -225,6 +230,25 @@ void editorRefreshScreen(){
 
 
 /*** Functions to process input  ***/
+
+void editorMoveCursor(char key) {
+    // now we can move the cursor left, up, down, right using awsd.
+    switch (key) {
+        case 'a':
+        E.cx--;
+        break;
+        case 'd':
+        E.cx++;
+        break;
+        case 'w':
+        E.cy--;
+        break;
+        case 's':
+        E.cy++;
+        break;
+    }
+}
+
 void editorProcessKeypress(){
     char c = editorReadKey();
 
@@ -233,6 +257,13 @@ void editorProcessKeypress(){
             clearScreen();
             exit(0);
             break;
+        
+            case 'w':
+            case 's':
+            case 'a':
+            case 'd':
+                editorMoveCursor(c);
+                break;
     }
 }
 
@@ -240,6 +271,10 @@ void editorProcessKeypress(){
 
 // initializes the Editor
 void initEditor() {
+    // initializing the x and y positions for the cursor to use later 
+    E.cx = 0;
+    E.cy = 0;
+
   if (getWindowSize(&E.screenrows, &E.screencols) == -1) // checks if errored
     die("getWindowSize");
 }

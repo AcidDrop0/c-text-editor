@@ -25,6 +25,12 @@
 // hex 0x1f = 0001 1111 (in binary) = 31 (in decimal)
 #define CTRL_KEY(k) ((k) & 0x1f) // Simple macro for better understanding
 
+enum editorKey {
+    ARROW_LEFT = 'a',
+    ARROW_RIGHT = 'd',
+    ARROW_UP = 'w',
+    ARROW_DOWN = 's'
+};
 
 // Convenient struct to store everything related to our terminal settings
 struct editorConfig {
@@ -111,10 +117,10 @@ char editorReadKey() {
 
         if(seq[0] == '['){
             switch (seq[1]){
-                case 'A': return 'w'; // ESC [ A --> Up arrow key
-                case 'B': return 's'; // ESC [ B --> Down arrow key
-                case 'C': return 'd'; // ESC [ C --> Right arrow key
-                case 'D': return 'a'; // ESC [ D --> Left arrow key
+                case 'A': return ARROW_UP; // ESC [ A --> Up arrow key
+                case 'B': return ARROW_DOWN; // ESC [ B --> Down arrow key
+                case 'C': return ARROW_RIGHT; // ESC [ C --> Right arrow key
+                case 'D': return ARROW_LEFT; // ESC [ D --> Left arrow key
             }
         }
 
@@ -258,18 +264,18 @@ void editorRefreshScreen(){
 void editorMoveCursor(char key) {
     // now we can move the cursor left, up, down, right using awsd.
     switch (key) {
-        case 'a':
-        E.cx--;
-        break;
-        case 'd':
-        E.cx++;
-        break;
-        case 'w':
-        E.cy--;
-        break;
-        case 's':
-        E.cy++;
-        break;
+        case ARROW_LEFT:
+            E.cx--;
+            break;
+        case ARROW_RIGHT:
+            E.cx++;
+            break;
+        case ARROW_DOWN:
+            E.cy--;
+            break;
+        case ARROW_UP:
+            E.cy++;
+            break;
     }
 }
 
@@ -283,10 +289,10 @@ void editorProcessKeypress(){
             exit(0);
             break;
         
-        case 'w':
-        case 's':
-        case 'a':
-        case 'd':
+        case ARROW_UP:
+        case ARROW_DOWN:
+        case ARROW_LEFT:
+        case ARROW_RIGHT:
             editorMoveCursor(c);
             break;
     }

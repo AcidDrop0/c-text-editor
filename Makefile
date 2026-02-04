@@ -1,7 +1,7 @@
 CC = gcc
 FLAGS = -Wall -Wextra
 
-exit: exit.c
+texit: texit.c
 	$(CC) texit.c -o bin/texit
 
 clean:

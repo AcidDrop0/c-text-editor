@@ -26,10 +26,10 @@
 #define CTRL_KEY(k) ((k) & 0x1f) // Simple macro for better understanding
 
 enum editorKey {
-    ARROW_LEFT = 'a',
-    ARROW_RIGHT = 'd',
-    ARROW_UP = 'w',
-    ARROW_DOWN = 's'
+    ARROW_LEFT = 1000, // choosing large enough number, so there are no conflicts
+    ARROW_RIGHT,
+    ARROW_UP,
+    ARROW_DOWN
 };
 
 // Convenient struct to store everything related to our terminal settings
@@ -53,12 +53,13 @@ struct abuf {
 void die(const char *s);
 void disableRawMode();
 void enableRawMode();
-char editorReadKey();
+int editorReadKey();
 void editorDrawRows();
 void clearScreen();
 void editorRefreshScreen();
 void editorProcessKeypress();
 int getWindowSize(int *rows, int *cols);
+void editorMoveCursor(int key);
 
 
 // error handling function
@@ -95,7 +96,7 @@ void enableRawMode(){
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) die("tcsetattr"); // sets terminal settings
 }
 
-char editorReadKey() {
+int editorReadKey() {
     int nread; // variable to store the return of read
     char c;
     while ((nread = read(STDIN_FILENO, &c, 1)) != 1) { // if the one byte wasn't read
@@ -261,7 +262,7 @@ void editorRefreshScreen(){
 
 /*** Functions to process input  ***/
 
-void editorMoveCursor(char key) {
+void editorMoveCursor(int key) {
     // now we can move the cursor left, up, down, right using awsd.
     switch (key) {
         case ARROW_LEFT:
@@ -270,17 +271,17 @@ void editorMoveCursor(char key) {
         case ARROW_RIGHT:
             E.cx++;
             break;
-        case ARROW_DOWN:
+        case ARROW_UP:
             E.cy--;
             break;
-        case ARROW_UP:
+        case ARROW_DOWN:
             E.cy++;
             break;
     }
 }
 
 void editorProcessKeypress(){
-    char c = editorReadKey(); // returns the key that was read
+    int c = editorReadKey(); // returns the key that was read
     // arrow keys
 
     switch (c) {

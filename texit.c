@@ -25,6 +25,7 @@
 // hex 0x1f = 0001 1111 (in binary) = 31 (in decimal)
 #define CTRL_KEY(k) ((k) & 0x1f) // Simple macro for better understanding
 
+
 // Convenient struct to store everything related to our terminal settings
 struct editorConfig {
     int cx, cy; // cursor placement
@@ -91,12 +92,35 @@ void enableRawMode(){
 char editorReadKey() {
     int nread; // variable to store the return of read
     char c;
-    while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
-        if (nread == -1 && errno != EAGAIN) 
+    while ((nread = read(STDIN_FILENO, &c, 1)) != 1) { // if the one byte wasn't read
+        if (nread == -1 && errno != EAGAIN)
             die("read"); // if error --> print error and exit the program 
     }
 
-    return c;
+    // if we stumble upon an escape sequence.
+    // This can be verified by checking that the 1st byte is the ESC char
+    if(c == '\x1b'){
+        // buffer to store what is left after the escape char, as it is more than 1 byte
+        char seq[3]; 
+        // We make the seq buffer is 3 bytes long because 
+        // we will be handling longer escape sequences in the future
+
+        // If reads time out (no more bytes after ESC char), then return the ESC and quit
+        if(read(STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
+        if(read(STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
+
+        if(seq[0] == '['){
+            switch (seq[1]){
+                case 'A': return 'w'; // ESC [ A --> Up arrow key
+                case 'B': return 's'; // ESC [ B --> Down arrow key
+                case 'C': return 'd'; // ESC [ C --> Right arrow key
+                case 'D': return 'a'; // ESC [ D --> Left arrow key
+            }
+        }
+
+        return '\x1b';
+    }
+    else return c;
 }
 
 int getCursorPosition(int *rows, int *cols) {
@@ -250,7 +274,8 @@ void editorMoveCursor(char key) {
 }
 
 void editorProcessKeypress(){
-    char c = editorReadKey();
+    char c = editorReadKey(); // returns the key that was read
+    // arrow keys
 
     switch (c) {
         case CTRL_KEY('q'): //exit if ctrl+Q is inputted
@@ -258,14 +283,15 @@ void editorProcessKeypress(){
             exit(0);
             break;
         
-            case 'w':
-            case 's':
-            case 'a':
-            case 'd':
-                editorMoveCursor(c);
-                break;
+        case 'w':
+        case 's':
+        case 'a':
+        case 'd':
+            editorMoveCursor(c);
+            break;
     }
 }
+
 
 /*** Main ***/
 

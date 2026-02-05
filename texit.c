@@ -25,6 +25,7 @@
 // hex 0x1f = 0001 1111 (in binary) = 31 (in decimal)
 #define CTRL_KEY(k) ((k) & 0x1f) // Simple macro for better understanding
 
+// row = y; column = x
 enum editorKey {
     ARROW_LEFT = 1000, // choosing large enough number, so there are no conflicts
     ARROW_RIGHT,
@@ -33,8 +34,9 @@ enum editorKey {
 };
 
 // Convenient struct to store everything related to our terminal settings
+// IMPORTANT!: cx and cy use 0-based indexing, even though terminals are 1-based indexed
 struct editorConfig {
-    int cx, cy; // cursor placement
+    int cx, cy; // cursor placement. Zero-based indexing for coordinates
     int screenrows;
     int screencols;
     struct termios orig_termios;
@@ -203,10 +205,10 @@ void editorDrawRows(struct abuf *ab) { // draws '~' VIM style
     int y;
     for (y = 0; y < E.screenrows; y++) {
         if(y == E.screenrows / 3){ // If on 1/3 part of the screen print welcome message
-            char welcome[80];
+            char welcome[124];
             int welcomeLen = snprintf(welcome, sizeof(welcome),
-            "Texit editor -- version %s", TEXIT_VERSION); // welcome message
-
+            "Texit editor -- version %s  |  E.screencols = %d; E.screenrows = %d; E.cx = %d; E.cy = %d", 
+            TEXIT_VERSION, E.screencols, E.screenrows, E.cx, E.cy); // welcome message
             // message shouldn't exceed the terminal column size
             if(welcomeLen > E.screencols) welcomeLen = E.screencols;
 
@@ -249,7 +251,8 @@ void editorRefreshScreen(){
 
     char buf[32]; // our string buffer
     // puts the cursor at the position stored in the global editorConfig struct E
-    snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1); 
+    // we + 1 both cy and cx, bcos \x1b[%d;%dH doesn't take zeros as arguments
+    snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1);
     abAppend(&ab, buf, strlen(buf)); // using strlen we find the actual length of the buf string
 
     abAppend(&ab, "\x1b[?25h", 6); // show the cursor back again
@@ -265,17 +268,26 @@ void editorRefreshScreen(){
 void editorMoveCursor(int key) {
     // now we can move the cursor left, up, down, right using awsd.
     switch (key) {
+        // the if checks are so the cursor doesn't end up getting out of the screen
         case ARROW_LEFT:
-            E.cx--;
+            if(E.cx != 0){
+                E.cx--;
+            }
             break;
         case ARROW_RIGHT:
-            E.cx++;
+            if(E.cx != E.screencols - 1){
+                E.cx++;
+            }
             break;
         case ARROW_UP:
-            E.cy--;
+            if(E.cy != 0){
+                E.cy--;
+            }
             break;
         case ARROW_DOWN:
-            E.cy++;
+            if(E.cy != E.screenrows - 1){
+                E.cy++;
+            }
             break;
     }
 }

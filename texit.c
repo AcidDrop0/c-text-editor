@@ -252,6 +252,7 @@ void editorDrawRows(struct abuf *ab) { // draws '~' VIM style
             // Centering the welcome message
             // padding - the amount of spaces we add till we append our message
             int padding = (E.screencols - welcomeLen) / 2; 
+            if(padding <0) padding = 0;
             if (padding) {
                 abAppend(ab, "~", 1);
                 padding--;
@@ -355,6 +356,7 @@ void editorProcessKeypress(){
                     editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
                 }
             }
+            break;
 
         case ARROW_UP:
         case ARROW_DOWN:

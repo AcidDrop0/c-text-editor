@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <sys/types.h>
 #include <sys/ioctl.h>
 
 // Disabled flags: ECHO, ICANON, ISIG, IXON, IEXTEN, ICRNL, OPOST. 
@@ -41,12 +42,21 @@ enum editorKey { // important functional keys
     DEL_KEY
 };
 
+
+typedef struct erow{
+    int size;
+    char* chars;
+}erow;
+
 // Convenient struct to store everything related to our terminal settings
 // IMPORTANT!: cx and cy use 0-based indexing, even though terminals are 1-based indexed
 struct editorConfig {
     int cx, cy; // cursor placement. Zero-based indexing for coordinates
     int screenrows;
     int screencols;
+
+    int numrows;
+    erow row;
     struct termios orig_termios;
 };
 
@@ -209,6 +219,18 @@ int getWindowSize(int *rows, int *cols) {
     }
 }
 
+/* File I/O functions*/
+void editorOpen(){
+    char *line = "Hello, world!";
+    ssize_t linelen = 13;
+
+    E.row.size = linelen;
+    E.row.chars = (char*)malloc(linelen*sizeof(char));
+    memcpy(E.row.chars, line, linelen);
+    E.row.chars[linelen] = '\0';
+    E.numrows = 1;
+}
+
 /***  Dynamic string functions  ***/
 
 // appends the given message from the given s string with the length len
@@ -241,26 +263,33 @@ void abFree(struct abuf *ab) {
 void editorDrawRows(struct abuf *ab) { // draws '~' VIM style 
     int y;
     for (y = 0; y < E.screenrows; y++) {
-        if(y == E.screenrows / 3){ // If on 1/3 part of the screen print welcome message
-            char welcome[124];
-            int welcomeLen = snprintf(welcome, sizeof(welcome),
-            "Texit editor -- version %s  |  E.screencols = %d; E.screenrows = %d; E.cx = %d; E.cy = %d", 
-            TEXIT_VERSION, E.screencols, E.screenrows, E.cx, E.cy); // welcome message
-            // message shouldn't exceed the terminal column size
-            if(welcomeLen > E.screencols) welcomeLen = E.screencols;
+        if(y >= E.numrows){
+            if(y == E.screenrows / 3){ // If on 1/3 part of the screen print welcome message
+                char welcome[124];
+                int welcomeLen = snprintf(welcome, sizeof(welcome),
+                "Texit editor -- version %s  |  E.screencols = %d; E.screenrows = %d; E.cx = %d; E.cy = %d", 
+                TEXIT_VERSION, E.screencols, E.screenrows, E.cx, E.cy); // welcome message
+                // message shouldn't exceed the terminal column size
+                if(welcomeLen > E.screencols) welcomeLen = E.screencols;
 
-            // Centering the welcome message
-            // padding - the amount of spaces we add till we append our message
-            int padding = (E.screencols - welcomeLen) / 2; 
-            if (padding) {
-                abAppend(ab, "~", 1);
-                padding--;
+                // Centering the welcome message
+                // padding - the amount of spaces we add till we append our message
+                int padding = (E.screencols - welcomeLen) / 2; 
+                if (padding) {
+                    abAppend(ab, "~", 1);
+                    padding--;
+                }
+                while (padding--) abAppend(ab, " ", 1);
+                abAppend(ab, welcome, welcomeLen);
             }
-            while (padding--) abAppend(ab, " ", 1);
-            abAppend(ab, welcome, welcomeLen);
+            else{
+                abAppend(ab, "~", 1);
+            }
         }
         else{
-            abAppend(ab, "~", 1);
+            int len = E.row.size;
+            if(len > E.screencols) len = E.screencols;
+            abAppend(ab, E.row.chars, len);
         }
 
         abAppend(ab, "\x1b[K", 3);
@@ -373,6 +402,7 @@ void initEditor() {
     // initializing the x and y positions for the cursor to use later 
     E.cx = 0;
     E.cy = 0;
+    E.numrows = 0;
 
   if (getWindowSize(&E.screenrows, &E.screencols) == -1) // checks if errored
     die("getWindowSize");
@@ -381,6 +411,7 @@ void initEditor() {
 int main(){
     enableRawMode();
     initEditor();
+    editorOpen();
 
     while (1) {
         editorRefreshScreen();

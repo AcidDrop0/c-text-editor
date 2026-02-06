@@ -1,3 +1,11 @@
+/*** includes ***/
+
+// There is a possibility, depending on the compiler, it may copmlain about getline()
+// This is why these macros were added, code is more portable
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
+#define _GNU_SOURCE
+
 #include <termios.h>
 #include <errno.h>
 #include <unistd.h>
@@ -80,6 +88,7 @@ void editorRefreshScreen();
 void editorProcessKeypress();
 int getWindowSize(int *rows, int *cols);
 void editorMoveCursor(int key);
+void editorOpen(char* filename);
 
 
 // error handling function
@@ -219,16 +228,31 @@ int getWindowSize(int *rows, int *cols) {
     }
 }
 
-/* File I/O functions*/
-void editorOpen(){
-    char *line = "Hello, world!";
-    ssize_t linelen = 13;
+/***  File I/O functions ***/
+void editorOpen(char* filename){
+    // open the given file
+    FILE* fp = fopen(filename, "r");
+    if (!fp) die("fopen");
 
-    E.row.size = linelen;
-    E.row.chars = (char*)malloc(linelen*sizeof(char));
-    memcpy(E.row.chars, line, linelen);
-    E.row.chars[linelen] = '\0';
-    E.numrows = 1;
+    char *line = NULL;
+    ssize_t linecap = 0;
+    ssize_t linelen;
+    linelen = getline(&line, &linecap, fp); // 
+    if(linelen != 1){ // not errored
+        while (linelen > 0 && (line[linelen-1] == '\n' ||
+                              line[linelen-1] == '\r'))
+        linelen--;
+
+        E.row.size = linelen;
+        E.row.chars = (char*)malloc(linelen*sizeof(char));
+        memcpy(E.row.chars, line, linelen);
+        E.row.chars[linelen] = '\0';
+        E.numrows = 1;
+    }
+    
+    free(line);
+    fclose(fp);
+
 }
 
 /***  Dynamic string functions  ***/
@@ -264,8 +288,10 @@ void editorDrawRows(struct abuf *ab) { // draws '~' VIM style
     int y;
     for (y = 0; y < E.screenrows; y++) {
         if(y >= E.numrows){
-            if(y == E.screenrows / 3){ // If on 1/3 part of the screen print welcome message
-                char welcome[124];
+            // If we are on 1/3 part of the screen and there file has no contents
+            // print the welcome message
+            if(E.numrows == 0 && y == E.screenrows / 3){ 
+                char welcome[128];
                 int welcomeLen = snprintf(welcome, sizeof(welcome),
                 "Texit editor -- version %s  |  E.screencols = %d; E.screenrows = %d; E.cx = %d; E.cy = %d", 
                 TEXIT_VERSION, E.screencols, E.screenrows, E.cx, E.cy); // welcome message
@@ -286,9 +312,10 @@ void editorDrawRows(struct abuf *ab) { // draws '~' VIM style
                 abAppend(ab, "~", 1);
             }
         }
-        else{
+        else{ // If we have a file with contents, then print those
             int len = E.row.size;
             if(len > E.screencols) len = E.screencols;
+
             abAppend(ab, E.row.chars, len);
         }
 
@@ -408,10 +435,12 @@ void initEditor() {
     die("getWindowSize");
 }
 
-int main(){
+int main(int argc, char *argv[]){
     enableRawMode();
     initEditor();
-    editorOpen();
+    if (argc >= 2) {
+        editorOpen(argv[1]);
+    }
 
     while (1) {
         editorRefreshScreen();

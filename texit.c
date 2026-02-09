@@ -405,6 +405,7 @@ void editorRefreshScreen(){
 
 /*** Functions to process input  ***/
 
+// Function responsible for the primitives up, down, left, right moves
 void editorMoveCursor(int key) {
     erow* row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
     // now we can move the cursor left, up, down, right using awsd.
@@ -414,11 +415,21 @@ void editorMoveCursor(int key) {
             if(E.cx != 0){
                 E.cx--;
             }
+            // pressing ← at the beginning of the line will move 
+            // the cursor to the end of the previous line.
+            else if(E.cy > 0){
+                E.cy--; // decrease cy --> go to previous line
+                E.cx = E.row[E.cy].size; // set cx to the end of row's chars
+            }
             break;
         case ARROW_RIGHT:
             // If there is a row, and we don't go over its size
             if(row && E.cx < row->size){
                 E.cx++;
+            }
+            else if(row && E.cx == row->size){
+                E.cy++;
+                E.cx = 0;
             }
             break;
         case ARROW_UP:
@@ -431,6 +442,13 @@ void editorMoveCursor(int key) {
                 E.cy++;
             }
             break;
+    }
+
+    // Defensive prevention
+    row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy]; // Check again if the row is real
+    int rowlen = row ? row->size : 0; // if it is get its length, not set len to zero
+    if (E.cx > rowlen) { // if the cx file coordiante exceeds the length snap it back 
+        E.cx = rowlen;  // by setting the coordinate to the length of the file
     }
 }
 

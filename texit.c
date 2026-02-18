@@ -137,8 +137,8 @@ void enableRawMode(){
     raw.c_cflag |= (CS8);
     raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
 
-    raw.c_cc[VMIN] = 0; // Minimum amount of bytes until read returnss
-    raw.c_cc[VTIME] = 5; // wait 0.4 seconds for input
+    raw.c_cc[VMIN] = 1; // Minimum amount of bytes until read returnss
+    raw.c_cc[VTIME] = 0; // wait 0.4 seconds for input
 
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) die("tcsetattr"); // sets terminal settings
 }
@@ -317,7 +317,7 @@ void editorOpen(char* filename){
     if (!fp) die("fopen");
 
     char *line = NULL;
-    ssize_t linecap = 0;
+    size_t linecap = 0;
     ssize_t linelen;
     // while loop through each row in the FILE.
     while((linelen = getline(&line, &linecap, fp)) != -1){ // not errored
@@ -607,6 +607,7 @@ void editorProcessKeypress(){
                     editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
                 }
             }
+            break;
 
         case ARROW_UP:
         case ARROW_DOWN:

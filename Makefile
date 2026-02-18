@@ -1,8 +1,15 @@
 CC = gcc
-FLAGS = -Wall -Wextra
+CFLAGS = -Wall -Wextra
+TARGET = bin/texit
+SOURCE = texit.c
 
-texit: texit.c
-	$(CC) texit.c -o bin/texit
+$(TARGET): $(SOURCE) | bin
+	$(CC) $(CFLAGS) $(SOURCE) -o $(TARGET)
+
+bin:
+	mkdir -p bin
 
 clean:
-	rm -f *.o
+	rm -f $(TARGET) *.o
+
+.PHONY: clean bin  # Mark phony targets

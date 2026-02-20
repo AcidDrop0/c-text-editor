@@ -8,6 +8,7 @@
 
 #include <termios.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
@@ -39,6 +40,7 @@
 
 // row = y; column = x
 enum editorKey { // important functional keys
+    BACKSPACE = 127,
     ARROW_LEFT = 1000, // choosing large enough number, so there are no conflicts
     ARROW_RIGHT,
     ARROW_UP,
@@ -93,6 +95,8 @@ struct abuf {
 // constructor for our abuf struct
 #define ABUF_INIT {NULL, 0} // pointer to null, length = 0
 
+
+/*** Prototypes ***/
 void die(const char *s);
 void disableRawMode();
 void enableRawMode();
@@ -107,6 +111,7 @@ void editorOpen(char* filename);
 void editorAppendRow(char *s, size_t len);
 void editorScroll();
 void editorUpdateRow(erow *row);
+void editorSetStatusMessage(const char *fmt, ...);
 
 
 // error handling function
@@ -294,7 +299,7 @@ void editorAppendRow(char *s, size_t len) {
     int at = E.numrows; // index of the current row in the array of all rows
 
     E.row[at].size = len; // set the length of the current row
-    E.row[at].chars = malloc(len + 1); // allocate memory for the row
+    E.row[at].chars = malloc(len + 1); // allocate memory for the row. (+1 for '\0')
 
     memcpy(E.row[at].chars, s, len); // copy the row
     E.row[at].chars[len] = '\0'; // null-terminate
@@ -307,7 +312,50 @@ void editorAppendRow(char *s, size_t len) {
     E.numrows++; // increment to indicate another row that was appended
 }
 
+void editorRowInsertChar(erow *row, int at, int c) {
+    if (at < 0 || at > row->size) at = row->size;
+    // allocate new memory for the inserted char
+    row->chars = realloc(row->chars, row->size + 2); // +2 for new char & null terminator 
+    // copy chars starting from the index [at] to the index [at+1]
+    memmove(&row->chars[at + 1], &row->chars[at], row->size - at + 1);
+
+    row->size++; // update row size, as a char was inserted
+    row->chars[at] = c; // insert the character
+    editorUpdateRow(row);
+}
+
+/*** editor operations ***/
+void editorInsertChar(int c){
+    if(E.cy == E.numrows){
+        editorAppendRow("", 0);
+    }
+    editorRowInsertChar(&E.row[E.cy], E.cx, c);
+    E.cx++;
+}
+
 /***  File I/O functions ***/
+
+char* editorRowsToString(int *buflen){
+    int totlen = 0; // total file string length
+    int j;
+    for(j = 0; j < E.numrows; j++)
+        totlen += E.row[j].size +1; // for each row +1 considering the addition of newline '\n'
+    *buflen = totlen; // total length of the file
+
+    char* buf = malloc(totlen); // allocate enough string space
+    char* p = buf;
+    // Copies each row into the buffer, and adds the newline at the end
+    for(j = 0; j < E.numrows; j++){
+        memcpy(p, E.row[j].chars, E.row[j].size); 
+        p += E.row[j].size;
+        *p = '\n';
+        p++; // after adding '\n' go to next line
+    }
+
+    return buf;
+}
+
+
 void editorOpen(char* filename){
     free(E.filename);
     E.filename = strdup(filename);
@@ -332,6 +380,31 @@ void editorOpen(char* filename){
     free(line);
     fclose(fp);
 
+}
+
+void editorSave(){
+    if (E.filename == NULL) return; // If no file was opened
+
+    int len;
+    char *buf = editorRowsToString(&len); // get the string with full file contents
+
+    // open the file
+    int fd = open(E.filename, O_RDWR | O_CREAT, 0644);
+    // error checking
+    if(fd != -1){
+        // truncate the file by increasing or decreasing depending on the length len
+        if(ftruncate(fd, len) != -1){ // if truncating was successful
+            if(write(fd, buf, len) == len){ // if write successful
+                close(fd);
+                free(buf);
+                editorSetStatusMessage("%d bytes written to disk", len);
+                return;
+            }
+        }
+        close(fd);
+    }
+    free(buf);
+    editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
 }
 
 /***  Dynamic string functions  ***/
@@ -574,9 +647,17 @@ void editorProcessKeypress(){
     // arrow keys
 
     switch (c) {
+        case '\r': // Enter key
+            /* TODO*/
+            break;
+
         case CTRL_KEY('q'): //exit if ctrl+Q is inputted
             clearScreen();
             exit(0);
+            break;
+
+        case CTRL_KEY('S'):
+            editorSave();
             break;
 
         case HOME_KEY:
@@ -587,6 +668,12 @@ void editorProcessKeypress(){
             if(E.cy < E.numrows)
                 E.cx = E.row[E.cy].size;
 
+            break;
+
+        case BACKSPACE:
+        case CTRL_KEY('h'): // sends decimal 8, which is what BackSpace would originally send back in the day
+        case DEL_KEY:      // but for whatever reason, in modern computers BackSpace key is mapped to 127
+            /* TODO*/
             break;
 
         case PAGE_UP:
@@ -614,6 +701,14 @@ void editorProcessKeypress(){
         case ARROW_LEFT:
         case ARROW_RIGHT:
             editorMoveCursor(c);
+            break;
+
+        case CTRL_KEY('l'): // responsible for refreshing screen, not needed as we already do that
+        case '\x1b': // escape char 
+            break;
+        
+        default:
+            editorInsertChar(c);
             break;
     }
 }
@@ -649,7 +744,7 @@ int main(int argc, char *argv[]){
         editorOpen(argv[1]);
     }
 
-    editorSetStatusMessage("HELP: Ctrl-Q = quit");
+    editorSetStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit");
 
     while (1) {
         editorRefreshScreen();

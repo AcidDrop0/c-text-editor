@@ -34,6 +34,7 @@
 
 #define TEXIT_VERSION "0.0.1"
 #define TEXIT_TAB_STOP 4
+#define KILO_QUIT_TIMES 3
 
 // hex 0x1f = 0001 1111 (in binary) = 31 (in decimal)
 #define CTRL_KEY(k) ((k) & 0x1f) // Simple macro for better understanding
@@ -79,6 +80,7 @@ struct editorConfig {
     // an array that will contain all the rows of the opened file
     erow *row;
     struct termios orig_termios;
+    int dirty; // indicates whether the text loaded in our editor differs from what's in file
 
     char *filename; // the name of our file that we open
     char statusmsg[80];
@@ -292,6 +294,7 @@ void editorUpdateRow(erow *row) {
     row->rsize = idx; // setting the size of the render chars
 }
 
+// Function that 
 void editorAppendRow(char *s, size_t len) {
     // We reallocate the array memory space each row
     // The last realloc call will be the amount of rows there are in the file
@@ -304,12 +307,28 @@ void editorAppendRow(char *s, size_t len) {
     memcpy(E.row[at].chars, s, len); // copy the row
     E.row[at].chars[len] = '\0'; // null-terminate
 
-    // Initialize the to be displayed row contents
+    // Initialize the render contents, that will be used to show the file contents in the terminal
     E.row[at].rsize = 0;
     E.row[at].render = NULL;
     editorUpdateRow(&E.row[at]);
 
     E.numrows++; // increment to indicate another row that was appended
+    E.dirty++; // 
+}
+
+void editorFreeRow(erow *row){
+    free(row->render);
+    free(row->chars);
+}
+
+// Deletion of the row if we backspace at the start of a line
+void editorDelRow(int at){
+    if(at < 0 || at >= E.numrows) return; // checks the vertical boundary
+    editorFreeRow(&E.row[at]); // Free the row struct contents
+    // Move all the rows that come after the deleted row up by one,
+    memmove(&E.row[at], &E.row[at+1], sizeof(erow) * (E.numrows -at -1));
+    E.numrows--; // row deleted
+    E.dirty++; // changes made
 }
 
 void editorRowInsertChar(erow *row, int at, int c) {
@@ -322,7 +341,37 @@ void editorRowInsertChar(erow *row, int at, int c) {
     row->size++; // update row size, as a char was inserted
     row->chars[at] = c; // insert the character
     editorUpdateRow(row);
+    E.dirty++;
 }
+
+void editorRowAppendString(erow *row, char *s, size_t len){
+    // reallocate memory for all the chars stored in the deleted row 
+    row->chars = realloc(row->chars, row->size + len + 1); // +1 for null byte
+    // Copy all the characters of the deleted row, at the end of the new row
+    // Where the end is row->chars[row->size], as row->size signifies the end
+    memcpy(&row->chars[row->size], s, len);
+    row->size += len; // set the new corresponding length
+    row->chars[row->size] = '\0'; // null-terminate
+
+    editorUpdateRow(row); // Update the row render contents
+    E.dirty++; // changes made
+}
+
+// Implementation of backspascing. 
+// row: corresponds for the vertical position of the cursor
+// at: corresponds for the horizontal position of the cursor
+void editorRowDelChar(erow *row, int at){
+    if (at < 0 || at >= row->size) return; // checking cursor vertical boundary
+
+    // move all chars to the right of the cursor one to the left 
+    memmove(&row->chars[at], &row->chars[at + 1], row->size - at);
+    row->size--; // decrease row size
+
+    editorUpdateRow(row); // Update the display row (render)
+    E.dirty++;
+
+}
+
 
 /*** editor operations ***/
 void editorInsertChar(int c){
@@ -331,6 +380,31 @@ void editorInsertChar(int c){
     }
     editorRowInsertChar(&E.row[E.cy], E.cx, c);
     E.cx++;
+}
+
+
+void editorDelChar(){
+    if(E.cy == E.numrows) return; // can't backspace nonexistent row
+    if (E.cx == 0 && E.cy == 0) return; // can't backspace the very 1st row
+
+    // The row that the cursor is on right now (vertical positioning)
+    erow *row = &E.row[E.cy]; 
+    if(E.cx > 0){ // there exists a char to the left of the cursor
+        // E.cx-1 because we delete the car to the left of the cursor
+        editorRowDelChar(row, E.cx-1);
+        E.cx--; // change cursor positioning one to the left.
+    } 
+    // backspacing at the beginning of the row
+    else{
+        E.cx = E.row[E.cy - 1].size; // set the cursor to the end of the line of the prev row
+        // Firstly we append all the characters of the row on which we are
+        // and only then free the row and row's chars & render
+        editorRowAppendString(&E.row[E.cy - 1], row->chars, row->size);
+        editorDelRow(E.cy);
+        E.cy--; // row deleted
+    }
+
+    return;
 }
 
 /***  File I/O functions ***/
@@ -380,6 +454,7 @@ void editorOpen(char* filename){
     free(line);
     fclose(fp);
 
+    E.dirty = 0;
 }
 
 void editorSave(){
@@ -397,6 +472,7 @@ void editorSave(){
             if(write(fd, buf, len) == len){ // if write successful
                 close(fd);
                 free(buf);
+                E.dirty = 0;
                 editorSetStatusMessage("%d bytes written to disk", len);
                 return;
             }
@@ -513,11 +589,13 @@ void editorDrawStatusBar(struct abuf *ab){
 
     // the string length of status (strlen) after writing the message into the buffer
     // Copies the filename and amount of lines in the file. IF no file --> [No Name] & 0 lines
-    int len = snprintf(status, sizeof(status), "%.20s - %d lines",
-        E.filename ? E.filename : "[No Name]", E.numrows);
+    int len = snprintf(status, sizeof(status), "%.20s - %d lines %s",
+        E.filename ? E.filename : "[No Name]", E.numrows,
+        E.dirty ? "(modified)" : ""); // If dirty = 1 --> display "(modified)"
     // Copies on which line out of all the lines our cursor currently lies on
     int rlen = snprintf(rstatus, sizeof(rstatus), "%d/%d",
         E.cy + 1, E.numrows);
+
     if (len > E.screencols) len = E.screencols; // in case length is longer than colnum
     abAppend(ab, status, len);
 
@@ -643,6 +721,8 @@ void editorMoveCursor(int key) {
 }
 
 void editorProcessKeypress(){
+    static int quit_times = KILO_QUIT_TIMES;
+
     int c = editorReadKey(); // returns the key that was read
     // arrow keys
 
@@ -651,7 +731,13 @@ void editorProcessKeypress(){
             /* TODO*/
             break;
 
-        case CTRL_KEY('q'): //exit if ctrl+Q is inputted
+        case CTRL_KEY('q'): // Press CTRL+Q 3 times in a row to exit
+            if(E.dirty && quit_times > 0){ // In case of unsaved changes
+                editorSetStatusMessage("WARNING!!! File has unsaved changes. "
+                "Press Ctrl-Q %d more times to quit.", quit_times);
+                quit_times--;
+                return;
+            }
             clearScreen();
             exit(0);
             break;
@@ -673,7 +759,9 @@ void editorProcessKeypress(){
         case BACKSPACE:
         case CTRL_KEY('h'): // sends decimal 8, which is what BackSpace would originally send back in the day
         case DEL_KEY:      // but for whatever reason, in modern computers BackSpace key is mapped to 127
-            /* TODO*/
+            // DEL_KEY deletes key to the right of cursor
+            if(c == DEL_KEY) editorMoveCursor(ARROW_RIGHT); 
+            editorDelChar();
             break;
 
         case PAGE_UP:
@@ -711,6 +799,9 @@ void editorProcessKeypress(){
             editorInsertChar(c);
             break;
     }
+
+    quit_times = KILO_QUIT_TIMES;
+    return;
 }
 
 
@@ -726,6 +817,7 @@ void initEditor() {
     E.coloff = 0;
     E.numrows = 0;
     E.row = NULL;
+    E.dirty = 0;
     E.filename = NULL;
     E.statusmsg[0] = '\0';
     E.statusmsg_time = 0;
